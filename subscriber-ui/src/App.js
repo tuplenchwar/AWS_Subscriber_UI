@@ -70,68 +70,74 @@ function App() {
 
   const fetchMessages = async () => {
     try {
-      const response = await axios.get(`${subscriberUrl}/subscriber/receiveMessages`);
-      const storedMessages = JSON.parse(localStorage.getItem(messagesKey)) || {};
-      const newMessages = { ...storedMessages };
+        const response = await axios.get(`${subscriberUrl}/subscriber/receiveMessages`);
+        const storedMessages = JSON.parse(localStorage.getItem(messagesKey)) || {};
+        const newMessages = { ...storedMessages };
 
-      // Get the current time in UTC (milliseconds)
-      const now = Date.now();
-      const fifteenMinutesAgo = now - 15 * 60 * 1000;
+        // Get current time in UTC (milliseconds)
+        const now = Date.now();
+        const fifteenMinutesAgo = now - 15 * 60 * 1000;
 
-      response.data.forEach((msg) => {
-        if (!newMessages[msg.topic]) {
-          newMessages[msg.topic] = [];
-        }
-        newMessages[msg.topic].push(msg);
-      });
-
-      // Remove messages older than 15 minutes (Ensure timestamps are converted properly)
-      for (let topic in newMessages) {
-        newMessages[topic] = newMessages[topic].filter((msg) => {
-          const messageTimestamp = Date.parse(msg.timestamp); // Ensures UTC comparison
-          return !isNaN(messageTimestamp) && messageTimestamp > fifteenMinutesAgo;
+        response.data.forEach((msg) => {
+            if (!newMessages[msg.topic]) {
+                newMessages[msg.topic] = [];
+            }
+            newMessages[msg.topic].push(msg);
         });
-      }
 
-      setMessages((prevMessages) => {
+        // Filter out messages older than 15 minutes
+        for (let topic in newMessages) {
+            newMessages[topic] = newMessages[topic].filter((msg) => {
+                const messageTimestamp = Date.parse(msg.timestamp + "Z"); // Ensure UTC parsing
+                return !isNaN(messageTimestamp) && messageTimestamp > fifteenMinutesAgo;
+            });
+
+            // Remove topic from localStorage if it has no fresh messages left
+            if (newMessages[topic].length === 0) {
+                delete newMessages[topic];
+            }
+        }
+
+        // Save only fresh messages to localStorage
         localStorage.setItem(messagesKey, JSON.stringify(newMessages));
-        return newMessages;
-      });
+
+        // Update React state
+        setMessages(newMessages);
 
     } catch (error) {
-      console.error("Error fetching messages:", error);
+        console.error("Error fetching messages:", error);
     }
-  };
+};
 
 
-  useEffect(() => {
-    // Check if the subscriber is starting fresh
-    const isNewSession = !localStorage.getItem("sessionActive");
 
-    if (isNewSession) {
-      // Clear previous data
+
+useEffect(() => {
+  // Check if it's a fresh session
+  const isNewSession = !localStorage.getItem("sessionActive");
+
+  if (isNewSession) {
+      // Clear previous messages on new session
       localStorage.removeItem(storageKey);
       localStorage.removeItem(messagesKey);
-
-      // Mark the session as active
       localStorage.setItem("sessionActive", "true");
-
-      // Reset state variables
       setSubscribedTopics([]);
       setMessages({});
-    }
+  }
 
-    fetchSubscriberId();
-    fetchTopics();
-    fetchMessages();
+  fetchSubscriberId();
+  fetchTopics();
+  fetchMessages();
 
-    const interval = setInterval(() => {
+  // Run fetchMessages every 5 seconds to auto-remove old messages
+  const interval = setInterval(() => {
       fetchMessages();
       fetchTopics();
-    }, 5000);
+  }, 5000);
 
-    return () => clearInterval(interval);
-  }, []);
+  return () => clearInterval(interval);
+}, []);
+
 
   return (
     <div style={{ padding: "20px", fontFamily: "'Poppins', sans-serif", backgroundColor: "#1E1E2E", minHeight: "100vh", color: "#EAEAEA" }}>
@@ -146,7 +152,7 @@ function App() {
 
       {/* Title */}
       <h1 style={{ textAlign: "center", fontSize: "2.5rem", marginBottom: "10px", display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
-        🏆 Sports Buzz 🏀⚡🏏🎯
+        Sports Buzz 🏀🏈🏏🏓 
       </h1>
 
       <h3 style={{ textAlign: "center", fontStyle: "italic", fontSize: "1.2rem", color: "#B8B8B8" }}>
@@ -198,7 +204,7 @@ function App() {
               <p key={idx} style={{ color: "#00FFFF" }}>
                 {msg.message}{" "}
                 <small style={{ color: "#FFD700", marginLeft: "10px" }}>
-                  {new Date(msg.timestamp).toLocaleTimeString()}
+                {new Date(msg.timestamp + "Z").toLocaleString(undefined, { timeZoneName: "short" })}
                 </small>
               </p>
             ))}
